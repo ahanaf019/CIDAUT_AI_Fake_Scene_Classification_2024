@@ -7,3 +7,10 @@ Implementation and training of models using Pytorch for the **[CIDAUT AI Fake Sc
 **Classify if an autonomous driving scene is real or fake**
 
 Given an image, provide the probability of it being real (1) or fake (0)
+
+
+## Current Standing
+
+**Score:** 0.9366
+
+**Leaderboard:** 15/180

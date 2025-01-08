@@ -1,19 +1,12 @@
 import os
 from glob import glob
 from pathlib import Path
-import numpy as np
 import matplotlib.pyplot as plt
-import cv2
 import pandas as pd
-from tqdm import tqdm
 
 import torch
-import torch.nn as nn
-import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import Dataset, DataLoader
-from torchmetrics.classification import MulticlassAccuracy
-from torch.amp import GradScaler, autocast
+from torch.utils.data import DataLoader
 from sklearn.model_selection import train_test_split
 from dataset import *
 from utils import *
@@ -24,37 +17,33 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 
 
+DB_BASE_DIR = 'dataset/Train/'
 LEARNING_RATE = 1e-4
-BATCH_SIZE = 16
 NUM_CLASSES = 2
 NUM_EPOCHS = 50
-
-
+BATCH_SIZES = [32, 32, 32, 16, 16, 8]
+IMAGE_SIZES = [64, 128, 256, 384, 512, 672]
+TEST_SIZE = 0.1
 
 
 
 df = pd.read_csv('dataset/train.csv')
-image_paths = list(df['image'])
-labels = list(df['label'])
-base_dir = 'dataset/Train/'
-
-images_train, images_val, labels_train, labels_val = train_test_split(image_paths, labels, test_size=0.15, random_state=224)
-len(images_train), len(images_val)
+image_paths, labels = list(df['image']), list(df['label'])
+images_train, images_val, labels_train, labels_val = train_test_split(image_paths, labels, test_size=TEST_SIZE, random_state=224)
+print('No. Train Images: ', len(images_train), 'No. Val Images: ', len(images_val))
 
 
 
 model = MultiHeadAttentionCNN(NUM_CLASSES).to(device)
 optim = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 loss_fn = torch.nn.CrossEntropyLoss()
-# scaler = GradScaler()
 
 
-from torchinfo import summary
 
-# summary(model, input_size=(BATCH_SIZE, 3, IMAGE_SIZE, IMAGE_SIZE))
-
-
-for IMAGE_SIZE in [64, 128, 256, 384, 512]:
+# Progressive Upres Training
+for IMAGE_SIZE, BATCH_SIZE in zip(IMAGE_SIZES, BATCH_SIZES):
+    print(f'Training {model.__class__.__name__}: Image size: {IMAGE_SIZE}, Batch size: {BATCH_SIZE}')
+    print('*'*50)
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
 
@@ -76,18 +65,18 @@ for IMAGE_SIZE in [64, 128, 256, 384, 512]:
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
 
-    train_dataset = ImageDatasetV2(base_dir, images_train, labels_train, IMAGE_SIZE, train_data_transforms)
-    val_dataset = ImageDatasetV2(base_dir, images_val, labels_val, IMAGE_SIZE, test_data_transforms)
+    train_dataset = ImageDatasetV2(DB_BASE_DIR, images_train, labels_train, IMAGE_SIZE, train_data_transforms)
+    val_dataset = ImageDatasetV2(DB_BASE_DIR, images_val, labels_val, IMAGE_SIZE, test_data_transforms)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, prefetch_factor=2, num_workers=os.cpu_count())
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True)
+    save_fname = f'{model.__class__.__name__}_{IMAGE_SIZE}.pt'
+    trainer = ModelTrainer(model, train_loader, val_loader, optim, loss_fn, NUM_CLASSES, save_filename=save_fname)
 
-    losses, accs, val_losses, val_accs = train_model(
-        model, train_loader, val_loader, optim, loss_fn, NUM_CLASSES, NUM_EPOCHS, IMAGE_SIZE, device
-    )    
+    losses, accs, val_losses, val_accs = trainer.train_model(NUM_EPOCHS, early_stop_patience=15)
+    trainer.load_state(f'checkpoints/{model.__class__.__name__}/{save_fname}')
 
     plt.figure(figsize=(12, 6))
-
     plt.subplot(1,2,1)
     plt.plot(losses)
     plt.plot(val_losses)
@@ -98,13 +87,11 @@ for IMAGE_SIZE in [64, 128, 256, 384, 512]:
     plt.plot(val_accs)
     plt.legend(['acc', 'val_acc'])
     plt.suptitle(f'Image Size: {IMAGE_SIZE}')
-    plt.show()
+    plt.savefig(f'figs/graph_{IMAGE_SIZE}.png')
+    plt.close()
 
 
-load_state(f'checkpoints/{model.__class__.__name__}/{model.__class__.__name__}_frozen=-5_epoch-31_val-loss-0.0546.pt', model, optim)
-
-
-validation_epoch(model, val_loader, loss_fn, optim, device)
+print(trainer.validation_epoch())
 
 
 
@@ -125,8 +112,7 @@ df = pd.DataFrame({
     'image': fids,
     'label': preds
 })
-df.to_csv('submission_11.csv', index=False)
-df
+df.to_csv('Submissions/submission_13.csv', index=False)
 
 
 # !kaggle competitions submit -c cidaut-ai-fake-scene-classification-2024 -f submission_11.csv -m "Submission"

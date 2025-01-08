@@ -1,5 +1,6 @@
 *.ipynb
 *.zip
+figs/
 dataset/
 checkpoints/
 __pycache__/

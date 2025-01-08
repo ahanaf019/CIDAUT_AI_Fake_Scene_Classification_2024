@@ -89,7 +89,7 @@ if __name__ == '__main__':
     df = pd.read_csv('dataset/train.csv')
     image_paths = list(df['image'])
     labels = list(df['label'])
-    base_dir = 'dataset/Train/'
-    dataset = ImageDatasetV2(base_dir, image_paths, labels, 256, None)
+    DB_BASE_DIR = 'dataset/Train/'
+    dataset = ImageDatasetV2(DB_BASE_DIR, image_paths, labels, 256, None)
     x, y = next(iter(dataset))
     print(x.shape, y)
