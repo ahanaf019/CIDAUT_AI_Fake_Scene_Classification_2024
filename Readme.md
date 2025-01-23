@@ -8,9 +8,8 @@ Implementation and training of models using Pytorch for the **[CIDAUT AI Fake Sc
 
 Given an image, provide the probability of it being real (1) or fake (0)
 
-
-## Current Standing
+## Final Standing
 
 **Score:** 0.9366
 
-**Leaderboard:** 15/180
+**Leaderboard:** 19/255
